@@ -24,12 +24,12 @@
 (defvar lorg--links-cache-alist nil)
 
 (defun lorg--scan-file (file)
-    (with-current-buffer (find-file-noselect file)
-      (goto-char (point-min))
-      (while (re-search-forward "\\[\\[\\(https?://.*\\)\\]\\[\\(.*\\)\\]\\]" nil t)
-        (let ((url (match-string-no-properties 1))
-              (description (match-string-no-properties 2)))
-          (push (cons description url) lorg--links-cache-alist)))))
+  (with-temp-buffer
+    (insert-file-contents file)
+    (while (re-search-forward "\\[\\[\\(https?://.*\\)\\]\\[\\(.*\\)\\]\\]" nil t)
+      (let ((url (match-string-no-properties 1))
+            (description (match-string-no-properties 2)))
+        (push (cons description url) lorg--links-cache-alist)))))
 
 (defun lorg--get-ext-globs (ext)
   (let* ((globs))
