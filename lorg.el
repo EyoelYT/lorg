@@ -15,73 +15,135 @@
 ;;
 ;;; Commentary:
 ;;
-;;  Description
+;; Lorg provides a lightweight, Org-mode–based link manager.
+;; It scans one or more directories or files for org-style links,
+;; caches them up to a configurable maximum, and provides an
+;; interactive menu to quickly open any link by its description.
+;;
+;;  Usage
+;;
+;;  1. Configure `lorg-files' to list the files and/or directories to scan.
+;;  2. Call `lorg-menu' (or bind it to a key) to invoke the link selector.
+;;     - With a prefix argument, the cache is refreshed before prompting.
+;;  3. Select a link description; the target URL or file path will open.
 ;;
 ;;; Code:
 
-(defvar lorg-files '())
-(defvar lorg-extensions '("org"))
-(defvar lorg--links-cache-alist nil)
+(require 'org)
+
+(defvar lorg-files nil
+  "List of files or directories to scan for Org links.
+Each element is either a path to a file or a directory.
+Directories are searched recursively for files matching
+`lorg-extensions'.")
+
+(defvar lorg-max-links 1000
+  "Maximum number of links to cache.
+Once this limit is reached during a scan, further links are ignored to
+prevent excessive memory usage.")
+
+(defvar lorg-extensions '("org")
+  "List of file extensions (without dot) to scan.
+Extensions may include encrypted variants; files ending
+in \".<ext>.gpg\" or \".<ext>.age\" are also matched automatically.")
+
+(defvar lorg--links-cache-alist nil
+  "Internal cache of scanned links.
+An alist of (DESCRIPTION . URI) pairs collected from scanned files.")
 
 (defun lorg--scan-file (file)
-  (with-temp-buffer
-    (insert-file-contents file)
-    (while (re-search-forward "\\[\\[\\(https?://.*\\)\\]\\[\\(.*\\)\\]\\]" nil t)
-      (let ((url (match-string-no-properties 1))
-            (description (match-string-no-properties 2)))
-        (push (cons description url) lorg--links-cache-alist)))))
+  "Scan FILE for Org links and populate `lorg--links-cache-alist'.
+Stop scanning when `lorg-max-links' entries have been added. Each link's
+description and URI (type & path) are stored in the cache."
+  (catch 'max-limit-reached
+    (with-temp-buffer
+      (insert-file-contents file)
+      (org-mode)
+      (while (re-search-forward org-link-any-re nil t)
+        (let* ((url (match-string-no-properties 2))
+               (description (or (match-string-no-properties 3) url))
+               (context (org-element-lineage
+                         (org-element-context) ; TODO: Check if we need to do all this
+                         '(citation citation-reference clock comment comment-block
+                           footnote-definition footnote-reference headline
+                           inline-src-block inlinetask keyword link node-property
+                           planning src-block timestamp)
+                         t))
+               (type (org-element-property :type context))
+               (path (if (equal type "file")
+                         (expand-file-name (org-element-property :path context))
+                       (org-element-property :path context))))
+          (if (and description type path)
+              (let ((uri (concat type ":" path)))
+                (push (cons description uri) lorg--links-cache-alist)
+                (when (>= (length lorg--links-cache-alist) lorg-max-links)
+                  (throw 'max-limit-reached t)))))))))
 
-(defun lorg--get-ext-globs (ext)
-  (let* ((globs))
-    (dolist (el ext globs)
-      (push (format "\"*.%s\"" el) globs)
-      (push (format "\"*.%s.gpg\"" el) globs)
-      (push (format "\"*.%s.age\"" el) globs))))
+(defun lorg--get-ext-globs (extslist)
+  "Return shell glob patterns for each extension in EXTSLIST.
+For each EXT in EXTSLIST, produce \"*.EXT\", \"*.EXT.gpg\", and
+\"*.EXT.age\"."
+  (let ((globs))
+    (dolist (ext extslist globs)
+      (push (format "\"*.%s\"" ext) globs)
+      (push (format "\"*.%s.gpg\"" ext) globs)
+      (push (format "\"*.%s.age\"" ext) globs))))
 
-(defun lorg--scan-directory (dir)
-  (when-let ((files (lorg--rg--fetch-files dir)))
+(defun lorg--scan-directory (dir) ; TODO: not working when earlier one is uninstalled
+  "Scan directory DIR recursively for files matching `lorg-extensions'.
+Uses one of three external functions to list files, then rescans each
+file's contents for links."
+  (when-let ((files (or (lorg--fd--fetch-files dir)
+                        (lorg--rg--fetch-files dir)
+                        (lorg--find--fetch-files dir))))
     (lorg--rescan-files files)))
 
 (defun lorg--shell-command-to-list (cmd)
-  "Return shell command output in a list"
+  "Execute shell command CMD and return non-blank output lines as a list of
+strings."
   (seq-filter (lambda (s) (not (string-blank-p s)))
               (split-string (ansi-color-filter-apply (shell-command-to-string cmd))
                             "\n")))
 
 (defun lorg--find--fetch-files (dir)
-  "Return all lorg files under DIR using executable \"find\""
+  "Use \"find\" to list all files under DIR matching `lorg-extensions'."
   (let ((exe (executable-find "find")))
-    (when (and exe lorg-extensions (file-directory-p dir))
+    (if (and exe lorg-extensions (file-directory-p dir))
       (let* ((globs (lorg--get-ext-globs lorg-extensions))
              (exts (string-join (mapcar (lambda (glob) (concat "-name " glob)) globs)
                                 " -o "))
              (command (string-join `(,exe "-L" ,(shell-quote-argument dir) "-type f \\(" ,exts "\\)")
                                    " ")))
-        (lorg--shell-command-to-list command)))))
+        (lorg--shell-command-to-list command))
+      nil)))
 
 (defun lorg--fd--fetch-files (dir)
-  "Return all lorg files under DIR using executable \"fd\""
+  "Use \"fd\" to list all files under DIR matching `lorg-extensions'."
   (let ((exe (executable-find "fd")))
-    (when (and exe lorg-extensions (file-directory-p dir))
-      (let* ((globs (lorg--get-ext-globs lorg-extensions))
-             (exts (string-join (mapcar (lambda (glob) (concat "-e " (substring glob 2 -1))) globs)
-                                " "))
-             (command (string-join `(,exe "-L" "--type file" ,exts "." ,dir)
-                                   " ")))
-        (lorg--shell-command-to-list command)))))
+    (if (and exe lorg-extensions (file-directory-p dir))
+        (let* ((globs (lorg--get-ext-globs lorg-extensions))
+               (exts (string-join (mapcar (lambda (glob) (concat "-e " (substring glob 2 -1))) globs)
+                                  " "))
+               (command (string-join `(,exe "-L" "--type file" ,exts "." ,(shell-quote-argument dir))
+                                     " ")))
+          (lorg--shell-command-to-list command))
+      nil)))
 
 (defun lorg--rg--fetch-files (dir)
+  "Use \"ripgrep\" to list all files under DIR matching `lorg-extensions'."
   (let ((exe (executable-find "rg")))
-    (when (and exe lorg-extensions (file-directory-p dir))
+    (if (and exe lorg-extensions (file-directory-p dir))
       (let* ((globs (lorg--get-ext-globs lorg-extensions))
-             (command (string-join `(,exe "-L" ,dir "--files" ,@(mapcar (lambda (glob) (concat "-g " glob)) globs))
+             (command (string-join `(,exe "-L" ,(shell-quote-argument dir) "--files" ,@(mapcar (lambda (glob) (concat "-g " glob)) globs))
                                    " ")))
-        (lorg--shell-command-to-list command)))))
+        (lorg--shell-command-to-list command))
+      nil)))
 
 (defun lorg--rescan-files (files)
-  "Reset `lorg--links-cache-alist' then populate it again"
-  (setq lorg--links-cache-alist nil)
-  (let* ((inhibit-read-only t))
+    "Clear `lorg--links-cache-alist' then scan each element of FILES.
+Each element may be a regular file or a directory."
+  (let* ((file)
+         (inhibit-read-only t))
     (while (setq file (pop files))
       (cond ((file-regular-p file)
              (lorg--scan-file file))
@@ -89,24 +151,44 @@
              (lorg--scan-directory file))))))
 
 (defun lorg--annotation-function (str pred flag)
+  "Annotation function for `completing-read'.
+When FLAG is 'metadata, return an annotation specification that shows
+the target URI. Otherwise, filter completions by PRED."
   (if (eq flag 'metadata)
       '(metadata (annotation-function
                   lambda (str)
-                  (concat " " (propertize " " 'display '(space :align-to 40))
-                          (propertize
-                           (cdr (assoc str lorg--links-cache-alist))
-                           'face (or 'marginalia-documentation 'font-lock-comment-face)))))
+                  (let ((entry (assoc str lorg--links-cache-alist)))
+                    (when entry
+                      (concat " " (propertize " " 'display '(space :align-to 40))
+                              (propertize (cdr entry)
+                                          'face (or 'marginalia-documentation
+                                                    'font-lock-comment-face)))))))
     (all-completions str (mapcar 'car lorg--links-cache-alist) pred)))
 
-(defun lorg-menu-ask (prompt alist handler &optional arg)
-  (when arg (lorg--rescan-files lorg-files))
+(defun lorg-menu-ask (prompt alist handler &optional force-rescan)
+  "Prompt with PROMPT over ALIST of (DESCRIPTION . URI) pairs.
+After selection, call HANDLER with the associated URI. If FORCE-RESCAN
+is non-nil or `lorg--links-cache-alist' is nil, refresh the link cache
+from `lorg-files' first."
+  (when (or (null lorg--links-cache-alist) force-rescan)
+    (setq lorg--links-cache-alist nil)
+    (lorg--rescan-files lorg-files))
   (let* ((choice (completing-read prompt #'lorg--annotation-function))
          (url (alist-get choice lorg--links-cache-alist nil nil 'equal)))
     (funcall handler url)))
 
+;;;###autoload
 (defun lorg-menu (&optional arg)
+  "Interactively select and open an Org link from `lorg-files'.
+With prefix ARG, force a rescan before prompting."
   (interactive "P")
   (lorg-menu-ask "Link: " lorg--links-cache-alist #'org-link-open-from-string (and arg)))
+
+;;;###autoload
+(defun lorg-menu-rescan ()
+  "Force a rescan of all `lorg-files' and then prompt to open a link."
+  (interactive)
+  (lorg-menu-ask "Link: " lorg--links-cache-alist #'org-link-open-from-string t))
 
 (provide 'lorg)
 ;;; lorg.el ends here
