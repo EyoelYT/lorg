@@ -5,7 +5,6 @@
 ;; Author: Eyoel Tesfu <EyoelYTesfu@gmail.com>
 ;; Maintainer: Eyoel Tesfu <EyoelYTesfu@gmail.com>
 ;; Created: December 17, 2025
-;; Modified: December 17, 2025
 ;; Version: 0.0.1
 ;; Keywords: convenience hypermedia  matching outlines text tools
 ;; Homepage: https://github.com/eyoeltesfu/lorg
@@ -30,6 +29,7 @@
 ;;; Code:
 
 (require 'org)
+(require 'ansi-color)
 
 (defvar lorg-files nil
   "List of files or directories to scan for Org links.
@@ -51,6 +51,9 @@ in \".<ext>.gpg\" or \".<ext>.age\" are also matched automatically.")
   "Internal cache of scanned links.
 An alist of (DESCRIPTION . URI) pairs collected from scanned files.")
 
+(defvar lorg-link-re org-link-any-re
+  "Variable that holds the regexp definition of what to capture from target files.")
+
 (defun lorg--scan-file (file)
   "Scan FILE for Org links and populate `lorg--links-cache-alist'.
 Stop scanning when `lorg-max-links' entries have been added. Each link's
@@ -59,7 +62,7 @@ description and URI (type & path) are stored in the cache."
     (with-temp-buffer
       (insert-file-contents file)
       (org-mode)
-      (while (re-search-forward org-link-any-re nil t)
+      (while (re-search-forward lorg-link-re nil t)
         (let* ((url (match-string-no-properties 2))
                (description (or (match-string-no-properties 3) url))
                (context (org-element-lineage
@@ -89,7 +92,7 @@ For each EXT in EXTSLIST, produce \"*.EXT\", \"*.EXT.gpg\", and
       (push (format "\"*.%s.gpg\"" ext) globs)
       (push (format "\"*.%s.age\"" ext) globs))))
 
-(defun lorg--scan-directory (dir) ; TODO: not working when earlier one is uninstalled
+(defun lorg--scan-directory (dir)
   "Scan directory DIR recursively for files matching `lorg-extensions'.
 Uses one of three external functions to list files, then rescans each
 file's contents for links."
