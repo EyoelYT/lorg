@@ -58,29 +58,30 @@ An alist of (DESCRIPTION . URI) pairs collected from scanned files.")
   "Scan FILE for Org links and populate `lorg--links-cache-alist'.
 Stop scanning when `lorg-max-links' entries have been added. Each link's
 description and URI (type & path) are stored in the cache."
-  (catch 'max-limit-reached
-    (with-temp-buffer
-      (insert-file-contents file)
+  (with-temp-buffer
+    (let ((org-inhibit-startup t)
+          (org-element-cache-persistent)
+          (org-element-use-cache)
+          (org-mode-hook)
+          (gc-cons-threshold 100000000) ; 100mb
+          (coding-system-for-read 'utf-8))
       (org-mode)
-      (while (re-search-forward lorg-link-re nil t)
-        (let* ((url (match-string-no-properties 2))
-               (description (or (match-string-no-properties 3) url))
-               (context (org-element-lineage
-                         (org-element-context) ; TODO: Check if we need to do all this
-                         '(citation citation-reference clock comment comment-block
-                           footnote-definition footnote-reference headline
-                           inline-src-block inlinetask keyword link node-property
-                           planning src-block timestamp)
-                         t))
-               (type (org-element-property :type context))
-               (path (if (equal type "file")
-                         (expand-file-name (org-element-property :path context))
-                       (org-element-property :path context))))
-          (if (and description type path)
-              (let ((uri (concat type ":" path)))
-                (push (cons description uri) lorg--links-cache-alist)
-                (when (>= (length lorg--links-cache-alist) lorg-max-links)
-                  (throw 'max-limit-reached t)))))))))
+      (buffer-disable-undo)
+      (insert-file-contents file)
+      (catch 'max-limit-reached
+        (while (re-search-forward lorg-link-re nil t)
+          (let* ((url (match-string-no-properties 2))
+                 (description (or (match-string-no-properties 3) url))
+                 (context (org-element-lineage (org-element-context) 'link t))
+                 (type (org-element-property :type context))
+                 (path (if (equal type "file")
+                           (expand-file-name (org-element-property :path context))
+                         (org-element-property :path context))))
+            (if (and description type path)
+                (let ((uri (concat type ":" path)))
+                  (push (cons description uri) lorg--links-cache-alist)
+                  (when (>= (length lorg--links-cache-alist) lorg-max-links)
+                    (throw 'max-limit-reached t))))))))))
 
 (defun lorg--get-ext-globs (extslist)
   "Return shell glob patterns for each extension in EXTSLIST.
