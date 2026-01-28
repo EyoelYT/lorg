@@ -47,12 +47,12 @@ prevent excessive memory usage.")
 Extensions may include encrypted variants; files ending
 in \".<ext>.gpg\" or \".<ext>.age\" are also matched automatically.")
 
+(defvar lorg-link-re org-link-any-re
+  "that Variable holds the regexp definition of what to capture from target files.")
+
 (defvar lorg--links-cache-alist nil
   "Internal cache of scanned links.
 An alist of (DESCRIPTION . URI) pairs collected from scanned files.")
-
-(defvar lorg-link-re org-link-any-re
-  "Variable that holds the regexp definition of what to capture from target files.")
 
 (defun lorg--scan-file (file)
   "Scan FILE for Org links and populate `lorg--links-cache-alist'.
@@ -106,17 +106,24 @@ file's contents for links."
   "Execute shell command CMD and return non-blank output lines as a list of
 strings."
   (seq-filter (lambda (s) (not (string-blank-p s)))
-              (split-string (ansi-color-filter-apply (shell-command-to-string cmd))
-                            "\n")))
+              (split-string
+               (ansi-color-filter-apply (shell-command-to-string cmd)) "\n")))
 
 (defun lorg--find--fetch-files (dir)
   "Use \"find\" to list all files under DIR matching `lorg-extensions'."
   (let ((exe (executable-find "find")))
     (if (and exe lorg-extensions (file-directory-p dir))
         (let* ((globs (lorg--get-ext-globs lorg-extensions))
-               (exts (string-join (mapcar (lambda (glob) (concat "-name " glob)) globs)
+               (exts (string-join (mapcar (lambda (glob)
+                                            (concat "-name " glob))
+                                          globs)
                                   " -o "))
-               (command (string-join `(,exe "-L" ,(shell-quote-argument dir) "-type f \\(" ,exts "\\)")
+               (command (string-join `(,exe
+                                       "-L"
+                                       ,(shell-quote-argument dir)
+                                       "-type f \\("
+                                       ,exts
+                                       "\\)")
                                      " ")))
           (lorg--shell-command-to-list command))
       nil)))
@@ -126,9 +133,16 @@ strings."
   (let ((exe (executable-find "fd")))
     (if (and exe lorg-extensions (file-directory-p dir))
         (let* ((globs (lorg--get-ext-globs lorg-extensions))
-               (exts (string-join (mapcar (lambda (glob) (concat "-e " (substring glob 2 -1))) globs)
+               (exts (string-join (mapcar (lambda (glob)
+                                            (concat "-e " (substring glob 2 -1)))
+                                          globs)
                                   " "))
-               (command (string-join `(,exe "-L" "--type file" ,exts "." ,(shell-quote-argument dir))
+               (command (string-join `(,exe
+                                       "-L"
+                                       "--type file"
+                                       ,exts
+                                       "."
+                                       ,(shell-quote-argument dir))
                                      " ")))
           (lorg--shell-command-to-list command))
       nil)))
@@ -138,7 +152,13 @@ strings."
   (let ((exe (executable-find "rg")))
     (if (and exe lorg-extensions (file-directory-p dir))
         (let* ((globs (lorg--get-ext-globs lorg-extensions))
-               (command (string-join `(,exe "-L" ,(shell-quote-argument dir) "--files" ,@(mapcar (lambda (glob) (concat "-g " glob)) globs))
+               (command (string-join `(,exe
+                                       "-L"
+                                       ,(shell-quote-argument dir)
+                                       "--files"
+                                       ,@(mapcar (lambda (glob)
+                                                   (concat "-g " glob))
+                                                 globs))
                                      " ")))
           (lorg--shell-command-to-list command))
       nil)))
