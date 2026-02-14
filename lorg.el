@@ -29,6 +29,7 @@
 ;;; Code:
 
 (require 'org)
+(require 'seq)
 (require 'ansi-color)
 
 (defvar lorg-files nil
@@ -48,7 +49,7 @@ Extensions may include encrypted variants; files ending
 in \".<ext>.gpg\" or \".<ext>.age\" are also matched automatically.")
 
 (defvar lorg-link-re org-link-any-re
-  "that Variable holds the regexp definition of what to capture from target files.")
+  "This variable holds the regexp definition of what to capture from target files.")
 
 (defvar lorg--links-cache-alist nil
   "Internal cache of scanned links.
@@ -97,9 +98,9 @@ For each EXT in EXTSLIST, produce \"*.EXT\", \"*.EXT.gpg\", and
   "Scan directory DIR recursively for files matching `lorg-extensions'.
 Uses one of three external functions to list files, then rescans each
 file's contents for links."
-  (when-let ((files (or (lorg--fd--fetch-files dir)
-                        (lorg--rg--fetch-files dir)
-                        (lorg--find--fetch-files dir))))
+  (when-let* ((files (or (lorg--fd--fetch-files dir)
+                         (lorg--rg--fetch-files dir)
+                         (lorg--find--fetch-files dir))))
     (lorg--rescan-files files)))
 
 (defun lorg--shell-command-to-list (cmd)
