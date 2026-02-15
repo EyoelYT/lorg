@@ -84,15 +84,28 @@ description and URI (type & path) are stored in the cache."
                   (when (>= (length lorg--links-cache-alist) lorg-max-links)
                     (throw 'max-limit-reached t))))))))))
 
-(defun lorg--get-ext-globs (extslist)
-  "Return shell glob patterns for each extension in EXTSLIST.
-For each EXT in EXTSLIST, produce \"*.EXT\", \"*.EXT.gpg\", and
+(defun lorg--get-ext-globs (exts)
+  "Return shell glob patterns for each extension in EXTS.
+For each EXT in EXTS, produce \"*.EXT\", \"*.EXT.gpg\", and
 \"*.EXT.age\"."
   (let ((globs))
-    (dolist (ext extslist globs)
+    (dolist (ext exts globs)
       (push (format "\"*.%s\"" ext) globs)
       (push (format "\"*.%s.gpg\"" ext) globs)
       (push (format "\"*.%s.age\"" ext) globs))))
+
+(defun lorg--get-ext-list (exts)
+  "Return list of extensions including encrypted variants.
+For each EXT in EXTS, produce EXT, \"EXT.gpg\", and \"EXT.age\"."
+  (append exts
+          (mapcan (lambda (ext)
+                    (list (concat ext ".gpg")
+                          (concat ext ".age")))
+                  exts)))
+
+(defun lorg--build-ext-regex (exts)
+  "Build a regex matching any extension in EXTS followed by end of string."
+  (rx-to-string `(or ,@exts) t))
 
 (defun lorg--scan-directory (dir)
   "Scan directory DIR recursively for files matching `lorg-extensions'.
@@ -100,7 +113,8 @@ Uses one of three external functions to list files, then rescans each
 file's contents for links."
   (when-let* ((files (or (lorg--fd--fetch-files dir)
                          (lorg--rg--fetch-files dir)
-                         (lorg--find--fetch-files dir))))
+                         (lorg--find--fetch-files dir)
+                         (lorg--native--fetch-files dir))))
     (lorg--rescan-files files)))
 
 (defun lorg--shell-command-to-list (cmd)
@@ -163,6 +177,19 @@ strings."
                                      " ")))
           (lorg--shell-command-to-list command))
       nil)))
+
+(defun lorg--native--fetch-files (dir)
+  "Recursively list all files under DIR matching `lorg-extensions'.
+This is a pure Elisp implementation that doesn't require external tools."
+  (when (and lorg-extensions (file-directory-p dir))
+    (let* ((exts (lorg--get-ext-list lorg-extensions))
+           (exts-regexp (lorg--build-ext-regex exts))
+           (cands (directory-files-recursively dir exts-regexp t))
+           (matches))
+      (dolist (file cands matches)
+        (unless (file-directory-p file)
+          (push file matches)))
+      matches)))
 
 (defun lorg--rescan-files (files)
   "Clear `lorg--links-cache-alist' then scan each element of FILES.
