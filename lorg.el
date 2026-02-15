@@ -207,14 +207,17 @@ Each element may be a regular file or a directory."
 When FLAG is 'metadata, return an annotation specification that shows
 the target URI. Otherwise, filter completions by PRED."
   (if (eq flag 'metadata)
-      '(metadata (annotation-function
-                  lambda (str)
-                  (let ((entry (assoc str lorg--links-cache-alist)))
-                    (when entry
-                      (concat " " (propertize " " 'display '(space :align-to 40))
-                              (propertize (cdr entry)
-                                          'face (or 'marginalia-documentation
-                                                    'font-lock-comment-face)))))))
+      `(metadata
+        (annotation-function
+         . ,(lambda (str)
+              (let ((entry (assoc str lorg--links-cache-alist)))
+                (when entry
+                  (concat " "
+                          (propertize " "
+                                      'display '(space :align-to 40))
+                          (propertize (cdr entry)
+                                      'face (or 'marginalia-documentation
+                                                'font-lock-comment-face))))))))
     (all-completions str (mapcar 'car lorg--links-cache-alist) pred)))
 
 (defun lorg-menu-ask (prompt handler &optional force-rescan)
