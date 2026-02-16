@@ -24,7 +24,7 @@
 ;;  1. Configure `lorg-files' to list the files and/or directories to scan.
 ;;  2. Call `lorg-menu' (or bind it to a key) to invoke the link selector.
 ;;     - With a prefix argument, the cache is refreshed before prompting.
-;;  3. Select a link description; the target URL or file path will open.
+;;  3. Select a link description; the target URI or file path will open.
 ;;
 ;;; Code:
 
@@ -53,7 +53,7 @@ in \".<ext>.gpg\" or \".<ext>.age\" are also matched automatically.")
 
 (defvar lorg--links-cache-alist nil
   "Internal cache of scanned links.
-An alist of (DESCRIPTION . URI) pairs collected from scanned files.")
+An alist of (DESCRIPTION URI . HEADING) pairs collected from scanned files.")
 
 (defun lorg--scan-file (file)
   "Scan FILE for Org links and populate `lorg--links-cache-alist'.
@@ -71,8 +71,11 @@ description and URI (type & path) are stored in the cache."
       (insert-file-contents file)
       (catch 'max-limit-reached
         (while (re-search-forward lorg-link-re nil t)
-          (let* ((url (match-string-no-properties 2))
-                 (description (or (match-string-no-properties 3) url))
+          (let* ((uri (match-string-no-properties 2))
+                 (description (or (match-string-no-properties 3) uri))
+                 (heading (save-excursion
+                            (org-up-heading-safe)
+                            (substring-no-properties (org-get-heading t t t t))))
                  (context (org-element-lineage (org-element-context) 'link t))
                  (type (org-element-property :type context))
                  (path (if (equal type "file")
@@ -80,7 +83,7 @@ description and URI (type & path) are stored in the cache."
                          (org-element-property :path context))))
             (if (and description type path)
                 (let ((uri (concat type ":" path)))
-                  (push (cons description uri) lorg--links-cache-alist)
+                  (push (cons description (cons uri heading)) lorg--links-cache-alist)
                   (when (>= (length lorg--links-cache-alist) lorg-max-links)
                     (throw 'max-limit-reached t))))))))))
 
@@ -204,13 +207,12 @@ Each element may be a regular file or a directory."
 
 (defun lorg--annotation-function (str)
   "Annotation function for completion candidates.
-This function returns the URL for STR as a right aligned annotation."
+This function returns the URI for STR as a right aligned annotation."
   (let ((entry (assoc str lorg--links-cache-alist)))
     (when entry
       (concat " "
-              (propertize " "
-                          'display '(space :align-to 40))
-              (propertize (cdr entry)
+              (propertize " " 'display '(space :align-to 40))
+              (propertize (or (cadr entry) "No uri")
                           'face (or 'marginalia-documentation
                                     'font-lock-comment-face))))))
 
@@ -221,7 +223,7 @@ of completion candidates. This function looks up each candidate in
 `lorg--links-cache-alist' and returns a list of (PREFIX DESCRIPTION
 SUFFIX)"
   (when cands
-    (let* ((max-margin 20)
+    (let* ((max-margin 50)
            (lens (mapcar (lambda (cand) (length cand)) cands))
            (margin (max (+ (apply #'max lens) 4) max-margin)))
       (mapcar
@@ -229,37 +231,49 @@ SUFFIX)"
          (let* ((desc cand)
                 (entry (assoc cand lorg--links-cache-alist))
                 (len (length desc))
-                (url (cdr entry))
+                (uri (cadr entry))
                 (spaces (make-string (- margin len) ?\s)))
            (list desc nil
                  (concat spaces
-                         (propertize url 'face (or 'marginalia-documentation
+                         (propertize uri 'face (or 'marginalia-documentation
                                                    'font-lock-comment-face))))))
        cands))))
+
+(defun lorg--group-function (cand transform)
+  "Group function for completion candidates.
+When TRANSFORM is nil, return the org-heading for CAND.
+When TRANSFORM is non-nil, return CAND unchanged."
+  (if transform
+      cand
+    (let ((entry (assoc cand lorg--links-cache-alist)))
+      (or (cddr entry) "(No Heading)"))))
 
 (defun lorg--completion-function (str pred flag)
   "Completion function for `completing-read'.
 When FLAG is 'metadata, return an annotation specification that shows
-the target URI. Otherwise, filter completions by PRED."
+the target URI, and groups by heading. Otherwise, filter completions by
+PRED."
   (cond ((eq flag 'metadata)
          `(metadata
            (category . lorg)
+           (group-function . lorg--group-function)
            (annotation-function . lorg--annotation-function)
-           (affixation-function . lorg--affixation-function)))
+           (affixation-function . lorg--affixation-function)
+           ))
         (t
          (all-completions str (mapcar 'car lorg--links-cache-alist) pred))))
 
 (defun lorg-menu-ask (prompt handler &optional force-rescan)
-  "Prompt with PROMPT over ALIST of (DESCRIPTION . URI) pairs.
+  "Prompt with PROMPT over ALIST of (DESCRIPTION URI . HEADING) pairs.
 After selection, call HANDLER with the associated URI. If FORCE-RESCAN
 is non-nil or `lorg--links-cache-alist' is nil, refresh the link cache
 from `lorg-files' first."
   (when (or (null lorg--links-cache-alist) force-rescan)
     (setq lorg--links-cache-alist nil)
     (lorg--rescan-files lorg-files))
-  (let* ((choice (completing-read prompt #'lorg--completion-function))
-         (url (alist-get choice lorg--links-cache-alist nil nil 'equal)))
-    (funcall handler url)))
+  (let* ((choice (completing-read prompt #'lorg--completion-function nil t))
+         (uri (cadr (assoc choice lorg--links-cache-alist))))
+    (funcall handler uri)))
 
 ;;;###autoload
 (defun lorg-menu (&optional arg)
