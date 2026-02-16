@@ -202,23 +202,52 @@ Each element may be a regular file or a directory."
             ((file-directory-p file)
              (lorg--scan-directory file))))))
 
-(defun lorg--annotation-function (str pred flag)
-  "Annotation function for `completing-read'.
+(defun lorg--annotation-function (str)
+  "Annotation function for completion candidates.
+This function returns the URL for STR as a right aligned annotation."
+  (let ((entry (assoc str lorg--links-cache-alist)))
+    (when entry
+      (concat " "
+              (propertize " "
+                          'display '(space :align-to 40))
+              (propertize (cdr entry)
+                          'face (or 'marginalia-documentation
+                                    'font-lock-comment-face))))))
+
+(defun lorg--affixation-function (cands)
+  "Affixation function for completion display.
+Aligns link descriptions and URLs in a columnar format. CANDS is a list
+of completion candidates. This function looks up each candidate in
+`lorg--links-cache-alist' and returns a list of (PREFIX DESCRIPTION
+SUFFIX)"
+  (when cands
+    (let* ((max-margin 20)
+           (lens (mapcar (lambda (cand) (length cand)) cands))
+           (margin (max (+ (apply #'max lens) 4) max-margin)))
+      (mapcar
+       (lambda (cand)
+         (let* ((desc cand)
+                (entry (assoc cand lorg--links-cache-alist))
+                (len (length desc))
+                (url (cdr entry))
+                (spaces (make-string (- margin len) ?\s)))
+           (list desc nil
+                 (concat spaces
+                         (propertize url 'face (or 'marginalia-documentation
+                                                   'font-lock-comment-face))))))
+       cands))))
+
+(defun lorg--completion-function (str pred flag)
+  "Completion function for `completing-read'.
 When FLAG is 'metadata, return an annotation specification that shows
 the target URI. Otherwise, filter completions by PRED."
-  (if (eq flag 'metadata)
-      `(metadata
-        (annotation-function
-         . ,(lambda (str)
-              (let ((entry (assoc str lorg--links-cache-alist)))
-                (when entry
-                  (concat " "
-                          (propertize " "
-                                      'display '(space :align-to 40))
-                          (propertize (cdr entry)
-                                      'face (or 'marginalia-documentation
-                                                'font-lock-comment-face))))))))
-    (all-completions str (mapcar 'car lorg--links-cache-alist) pred)))
+  (cond ((eq flag 'metadata)
+         `(metadata
+           (category . lorg)
+           (annotation-function . lorg--annotation-function)
+           (affixation-function . lorg--affixation-function)))
+        (t
+         (all-completions str (mapcar 'car lorg--links-cache-alist) pred))))
 
 (defun lorg-menu-ask (prompt handler &optional force-rescan)
   "Prompt with PROMPT over ALIST of (DESCRIPTION . URI) pairs.
@@ -228,7 +257,7 @@ from `lorg-files' first."
   (when (or (null lorg--links-cache-alist) force-rescan)
     (setq lorg--links-cache-alist nil)
     (lorg--rescan-files lorg-files))
-  (let* ((choice (completing-read prompt #'lorg--annotation-function))
+  (let* ((choice (completing-read prompt #'lorg--completion-function))
          (url (alist-get choice lorg--links-cache-alist nil nil 'equal)))
     (funcall handler url)))
 
