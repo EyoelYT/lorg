@@ -49,7 +49,24 @@ Extensions may include encrypted variants; files ending
 in \".<ext>.gpg\" or \".<ext>.age\" are also matched automatically.")
 
 (defvar lorg-link-re org-link-any-re
-  "This variable holds the regexp definition of what to capture from target files.")
+  "This variable holds the regexp definition of what to capture from target
+files.")
+
+(defvar lorg-group-use-breadcrumbs t
+  "When non-nil, group completions by full heading path.
+When nil, group by immediate parent heading only. Full path shows
+\"Parent/Child/Grandchild\" format. No need for rescanning to see
+changes.")
+
+(defvar lorg-group-breadcrumbs-show-filename nil
+  "When non-nil, prepend the source filename to breadcrumb paths.
+The filename is shown without its extension, e.g. a link under heading
+\"Tasks\" in \"work.org\" displays as \"work/Tasks\". Rescan needed for
+effect.")
+
+(defvar lorg-group-breadcrumbs-splitter "/"
+  "String needed to join breadcrumb segments.
+Rescan needed for effect.")
 
 (defvar lorg--links-cache-alist nil
   "Internal cache of scanned links.
@@ -75,7 +92,7 @@ description and URI (type & path) are stored in the cache."
                  (description (or (match-string-no-properties 3) uri))
                  (heading (save-excursion
                             (org-up-heading-safe)
-                            (substring-no-properties (org-get-heading t t t t))))
+                            (lorg--get-breadcrumbs)))
                  (context (org-element-lineage (org-element-context) 'link t))
                  (type (org-element-property :type context))
                  (path (if (equal type "file")
@@ -239,14 +256,29 @@ SUFFIX)"
                                                    'font-lock-comment-face))))))
        cands))))
 
+(defun lorg--get-breadcrumbs ()
+  (let ((breadcrumbs nil))
+    (save-excursion
+      (org-back-to-heading t)
+      (while (not (bobp))
+        (push (substring-no-properties (org-get-heading t t t t))
+              breadcrumbs)
+        (unless (org-up-heading-safe)
+          (goto-char (point-min))))
+      (when breadcrumbs
+        (string-join breadcrumbs lorg-group-breadcrumbs-splitter)))))
+
 (defun lorg--group-function (cand transform)
   "Group function for completion candidates.
 When TRANSFORM is nil, return the org-heading for CAND.
 When TRANSFORM is non-nil, return CAND unchanged."
   (if transform
       cand
-    (let ((entry (assoc cand lorg--links-cache-alist)))
-      (or (cddr entry) "(No Heading)"))))
+    (let* ((entry (assoc cand lorg--links-cache-alist))
+           (heading (cddr entry)))
+      (if (and heading (not lorg-group-use-breadcrumbs))
+          (car (last (split-string heading lorg-group-breadcrumbs-splitter)))
+        (or heading "(No Heading)")))))
 
 (defun lorg--completion-function (str pred flag)
   "Completion function for `completing-read'.
