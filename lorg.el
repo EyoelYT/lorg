@@ -104,10 +104,55 @@ Rescan is not needed for effect."
   :type 'string
   :group 'lorg)
 
-(defvar lorg--links-cache-alist nil
-  "Internal cache of scanned links.
-An alist of (DESCRIPTION . ((URI . FILENAME) . HEADING)) pairs collected
-from scanned files.")
+(defcustom lorg-cache-backend 'hash-table
+  "Backend data structure for the link cache.
+`alist' uses an association list (simple, handles duplicate
+descriptions).  `hash-table' uses a hash table for O(1) lookups.
+Rescan needed for effect."
+  :type '(choice (const :tag "Association list" alist)
+          (const :tag "Hash table" hash-table))
+  :group 'lorg)
+
+(defvar lorg--cache nil
+  "Internal link cache. Structure depends on `lorg-cache-backend'")
+
+(defun lorg--cache-clear ()
+  "Initialize or clear the links cache."
+  (setq lorg--cache
+        (if (eq lorg-cache-backend 'hash-table)
+            (make-hash-table :test 'equal :size lorg-max-links)
+          nil)))
+
+(defun lorg--cache-empty-p ()
+  "Return non-nil if the cache is empty or uninitialized"
+  (if (hash-table-p lorg--cache)
+      (= 0 (hash-table-count lorg--cache))
+    (null lorg--cache)))
+
+(defun lorg--cache-put (description uri filename heading)
+  "Store a link entry in the cache under DESCRIPTION"
+  (if (hash-table-p lorg--cache)
+      (puthash description (cons (cons uri filename) heading) lorg--cache)
+    (push (cons description (cons (cons uri filename) heading)) lorg--cache)))
+
+(defun lorg--cache-get (description)
+  "Look up DESCRIPTION in the cache.
+Return ((URI . FILENAME) . HEADING) or nil"
+  (if (hash-table-p lorg--cache)
+      (gethash description lorg--cache)
+    (cdr (assoc description lorg--cache))))
+
+(defun lorg--cache-keys ()
+  "Return list of all description strings in the cache."
+  (if (hash-table-p lorg--cache)
+      (hash-table-keys lorg--cache)
+    (mapcar #'car lorg--cache)))
+
+(defun lorg--cache-count ()
+  "Return the number of entries in the cache"
+  (if (hash-table-p lorg--cache)
+      (hash-table-count lorg--cache)
+    (length lorg--cache)))
 
 (defun lorg--scan-file (file)
   "Scan FILE for Org links and populate `lorg--links-cache-alist'.
@@ -124,7 +169,7 @@ description and URI (type & path) are stored in the cache."
       (org-mode)
       (buffer-disable-undo)
       (insert-file-contents file)
-      (let ((count (length lorg--links-cache-alist)))
+      (let ((count (lorg--cache-count)))
         (catch 'max-limit-reached
           (while (re-search-forward lorg-link-re nil t)
             (let* ((uri (match-string-no-properties 2))
@@ -139,8 +184,7 @@ description and URI (type & path) are stored in the cache."
                            (org-element-property :path context))))
               (if (and description type path)
                   (let ((uri (concat type ":" path)))
-                    (push (cons description (cons (cons uri filename) heading))
-                          lorg--links-cache-alist)
+                    (lorg--cache-put description uri filename heading)
                     (when (>= (setq count (+ count 1)) lorg-max-links)
                       (throw 'max-limit-reached t)))))))))))
 
@@ -262,12 +306,12 @@ Each element may be a regular file or a directory."
             ((file-directory-p file)
              (lorg--scan-directory file))))))
 
-(defun lorg--annotation-function (str)
+(defun lorg--annotation-function (desc)
   "Annotation function for completion candidates.
-This function returns the URI for STR as a right aligned annotation."
-  (let ((entry (assoc str lorg--links-cache-alist)))
+This function returns the URI for DESC as a right aligned annotation."
+  (let ((entry (lorg--cache-get desc)))
     (when entry
-      (let ((uri (caadr entry)))
+      (let ((uri (caar entry)))
         (concat " "
                 (propertize " " 'display '(space :align-to 40))
                 (propertize (or uri "No uri")
@@ -287,9 +331,9 @@ SUFFIX)"
       (mapcar
        (lambda (cand)
          (let* ((desc cand)
-                (entry (assoc cand lorg--links-cache-alist))
+                (entry (lorg--cache-get cand))
                 (len (length desc))
-                (uri (caadr entry))
+                (uri (caar entry))
                 (spaces (make-string (- margin len) ?\s)))
            (list desc nil
                  (concat spaces
@@ -325,10 +369,10 @@ configured."
       cand
     (if (null lorg-group-by)
         nil
-      (let* ((entry (assoc cand lorg--links-cache-alist))
-             (uri+file (cadr entry))    ; (URI . FILENAME)
+      (let* ((entry (lorg--cache-get cand))
+             (uri+file (car entry))    ; (URI . FILENAME)
              (file (cdr uri+file))
-             (heading (cddr entry))     ; full path heading
+             (heading (cdr entry))     ; full path heading
              (use-parent (memq 'parent lorg-group-by))
              (use-file (memq 'file lorg-group-by))
              (use-path (memq 'path lorg-group-by)))
@@ -352,17 +396,17 @@ completions matching STR by PRED."
            (annotation-function . lorg--annotation-function)
            (affixation-function . lorg--affixation-function)))
         (t
-         (all-completions str (mapcar 'car lorg--links-cache-alist) pred))))
+         (all-completions str (lorg--cache-keys) pred))))
 
 (defun lorg-menu-ask (prompt handler &optional force-rescan)
   "Prompt with PROMPT and call HANDLER with the selected link's URI.
 If FORCE-RESCAN is non-nil or `lorg--links-cache-alist' is empty,
 refresh the link cache from `lorg-files' before prompting."
-  (when (or (null lorg--links-cache-alist) force-rescan)
-    (setq lorg--links-cache-alist nil)
+  (when (or (lorg--cache-empty-p) force-rescan)
+    (lorg--cache-clear)
     (lorg--rescan-files lorg-files))
   (let* ((choice (completing-read prompt #'lorg--completion-function nil t))
-         (uri (caadr (assoc choice lorg--links-cache-alist))))
+         (uri (caar (lorg--cache-get choice))))
     (funcall handler uri)))
 
 ;;;###autoload
