@@ -55,8 +55,9 @@ Extensions may include encrypted variants; files ending
 in \".<ext>.gpg\" or \".<ext>.age\" are also matched automatically.")
 
 (defvar lorg-link-re org-link-any-re
-  "This variable holds the regexp definition of what to capture from target
-files.")
+  "Regexp used to match Org links during file scanning.
+Defaults to `org-link-any-re'. Override to restrict which link types are
+captured.")
 
 (defcustom lorg-group-by '(file)
   "Groups completion candidates in completing-read.
@@ -155,8 +156,8 @@ For each EXT in EXTS, produce EXT, \"EXT.gpg\", and \"EXT.age\"."
 
 (defun lorg--scan-directory (dir)
   "Scan directory DIR recursively for files matching `lorg-extensions'.
-Uses one of three external functions to list files, then rescans each
-file's contents for links."
+Tries `fd', `rg', `find', and a native Elisp fallback in that order,
+using the first that succeeds to list files, then scans each for links."
   (when-let* ((files (or (lorg--fd--fetch-files dir)
                          (lorg--rg--fetch-files dir)
                          (lorg--find--fetch-files dir)
@@ -238,7 +239,7 @@ This is a pure Elisp implementation that doesn't require external tools."
       matches)))
 
 (defun lorg--rescan-files (files)
-  "Clear `lorg--links-cache-alist' then scan each element of FILES.
+  "Scan each element of FILES for Org links.
 Each element may be a regular file or a directory."
   (let* ((file)
          (inhibit-read-only t))
@@ -284,6 +285,10 @@ SUFFIX)"
        cands))))
 
 (defun lorg--get-breadcrumbs ()
+  "Return the heading breadcrumb path at point as a string.
+Walks up the heading hierarchy collecting headings, then joins them with
+`lorg-group-breadcrumbs-splitter'. Return nil if point is not under any
+heading."
   (let ((breadcrumbs nil))
     (save-excursion
       (org-back-to-heading t)
@@ -296,9 +301,10 @@ SUFFIX)"
         (string-join breadcrumbs lorg-group-breadcrumbs-splitter)))))
 
 (defun lorg--group-function (cand transform)
-  "Group function for completion candidates.
-When TRANSFORM is nil, return the org-heading for CAND.
-When TRANSFORM is non-nil, return CAND unchanged."
+  "Group completion candidates according to `lorg-group-by'.
+When TRANSFORM is non-nil, return CAND unchanged. Otherwise build a
+group label from the file, heading path, or parent heading as
+configured."
   (if transform
       cand
     (if (null lorg-group-by)
@@ -333,10 +339,9 @@ PRED."
          (all-completions str (mapcar 'car lorg--links-cache-alist) pred))))
 
 (defun lorg-menu-ask (prompt handler &optional force-rescan)
-  "Prompt with PROMPT over ALIST of (DESCRIPTION URI . HEADING) pairs.
-After selection, call HANDLER with the associated URI. If FORCE-RESCAN
-is non-nil or `lorg--links-cache-alist' is nil, refresh the link cache
-from `lorg-files' first."
+  "Prompt with PROMPT and call HANDLER with the selected link's URI.
+If FORCE-RESCAN is non-nil or `lorg--links-cache-alist' is empty,
+refresh the link cache from `lorg-files' before prompting."
   (when (or (null lorg--links-cache-alist) force-rescan)
     (setq lorg--links-cache-alist nil)
     (lorg--rescan-files lorg-files))
