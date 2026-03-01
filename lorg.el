@@ -38,26 +38,36 @@
   :prefix "lorg-"
   :link '(url-link :tag "Github" "https://github.com/eyoelyt/lorg"))
 
-(defvar lorg-files nil
+(defcustom lorg-files nil
   "List of files or directories to scan for Org links.
 Each element is either a path to a file or a directory.
 Directories are searched recursively for files matching
-`lorg-extensions'.")
+`lorg-extensions'."
+  :type '(choice
+          (repeat :tag "List of files and directories" file)
+          (file :tag "Store list in a file\n" :value "~/.agenda_files"))
+  :group 'lorg)
 
-(defvar lorg-max-links 1000
+(defcustom lorg-max-links 1000
   "Maximum number of links to cache.
 Once this limit is reached during a scan, further links are ignored to
-prevent excessive memory usage.")
+prevent excessive memory usage."
+  :type 'natnum
+  :group 'lorg)
 
-(defvar lorg-extensions '("org")
+(defcustom lorg-extensions '("org")
   "List of file extensions (without dot) to scan.
 Extensions may include encrypted variants; files ending
-in \".<ext>.gpg\" or \".<ext>.age\" are also matched automatically.")
+in \".<ext>.gpg\" or \".<ext>.age\" are also matched automatically."
+  :type '(repeat string)
+  :group 'lorg)
 
-(defvar lorg-link-re org-link-any-re
+(defcustom lorg-link-re org-link-any-re
   "Regexp used to match Org links during file scanning.
 Defaults to `org-link-any-re'. Override to restrict which link types are
-captured.")
+captured."
+  :type 'regexp
+  :group 'lorg)
 
 (defcustom lorg-group-by '(file)
   "Groups completion candidates in completing-read.
@@ -82,13 +92,17 @@ Changes to this variable take effect immediately without rescanning."
           (const :tag "Immediate parent heading" parent))
   :group 'lorg)
 
-(defvar lorg-group-breadcrumbs-splitter "/"
+(defcustom lorg-group-breadcrumbs-splitter "/"
   "String needed to join breadcrumb segments.
-Rescan is needed for effect.")
+Rescan is needed for effect."
+  :type 'string
+  :group 'lorg)
 
-(defvar lorg-group-file-splitter "::"
+(defcustom lorg-group-file-splitter "::"
   "String needed to join file with breadcrumb.
-Rescan is not needed for effect.")
+Rescan is not needed for effect."
+  :type 'string
+  :group 'lorg)
 
 (defvar lorg--links-cache-alist nil
   "Internal cache of scanned links.
