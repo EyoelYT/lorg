@@ -1,0 +1,46 @@
+* lorg
+
+Lightweight, Org-mode based link manager for Emacs.
+
+Scans files and directories for org-style links, caches them, and provides an interactive menu to quickly open any link by its description.
+
+** Requirements
+
+- Emacs 27.1+
+- Org 9.3+
+
+** Setup
+
+#+begin_src elisp
+(require 'lorg)
+(setq lorg-files '("~/org/bookmarks.org"
+                   "~/org/links/"))
+#+end_src
+
+*** Use-Package
+
+#+begin_src emacs-lisp
+(use-package! lorg
+  :load-path "/path/to/lorg-directory"
+  :defer t
+  :commands (lorg-menu)
+  :config
+  (setq lorg-files '("~/org/bookmarks.org"
+                     "~/org/links/")))
+#+end_src
+
+** Usage
+
+- =M-x lorg-menu= — select and open a link
+- =C-u M-x lorg-menu= — rescan files, then select
+
+** Configuration
+
+- =lorg-files= — Files/directories to scan
+- =lorg-extensions= — File extensions to match (=.gpg= / =.age= variants are included automatically)
+- =lorg-max-links= — Max links to be stored in cache
+- =lorg-group-by= — Grouping: any combination of =file=, =path=, =parent=
+
+** File discovery
+
+Tries these tools in order: =fd=, =rg=, =find=, native Elisp fallback; and uses the first available one.

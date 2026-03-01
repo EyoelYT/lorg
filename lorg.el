@@ -7,7 +7,7 @@
 ;; Created: December 17, 2025
 ;; Version: 0.0.1
 ;; Keywords: convenience hypermedia  matching outlines text tools
-;; Homepage: https://github.com/eyoeltesfu/lorg
+;; Homepage: https://github.com/eyoelyt/lorg
 ;; Package-Requires: ((emacs "27.1") (org "9.3"))
 ;;
 ;; This file is not part of GNU Emacs.
