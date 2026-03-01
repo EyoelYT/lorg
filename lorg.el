@@ -32,6 +32,12 @@
 (require 'seq)
 (require 'ansi-color)
 
+(defgroup lorg nil
+  "Org-Mode based link manager."
+  :group 'org
+  :prefix "lorg-"
+  :link '(url-link :tag "Github" "https://github.com/eyoelyt/lorg"))
+
 (defvar lorg-files nil
   "List of files or directories to scan for Org links.
 Each element is either a path to a file or a directory.
@@ -52,37 +58,56 @@ in \".<ext>.gpg\" or \".<ext>.age\" are also matched automatically.")
   "This variable holds the regexp definition of what to capture from target
 files.")
 
-(defvar lorg-group-use-breadcrumbs t
-  "When non-nil, group completions by full heading path.
-When nil, group by immediate parent heading only. Full path shows
-\"Parent/Child/Grandchild\" format. No need for rescanning to see
-changes.")
+(defcustom lorg-group-by '(file)
+  "Groups completion candidates in completing-read.
+Value is a list of symbols. Supported symbols:
+  file   - include source filename (e.g., \"work.org\")
+  path   - include full heading path (e.g., \"Parent/Child/Grandchild\")
+  parent - include immediate parent heading only (overrides path if both present)
+  nil    - no grouping (flat list)
+Examples:
+  nil              - flat list, no groups
+  '(file)          - group by filename only
+  '(file path)     - group by filename + full heading path
+  '(file parent)   - group by filename + immediate parent
+  '(path)          - group by full heading path only
+  '(parent)        - group by immediate parent only
+  '(path parent)   - parent takes precedence (same as '(parent))
+  '(parent path)   - parent takes precedence (same as '(parent))
 
-(defvar lorg-group-breadcrumbs-show-filename nil
-  "When non-nil, prepend the source filename to breadcrumb paths.
-The filename is shown without its extension, e.g. a link under heading
-\"Tasks\" in \"work.org\" displays as \"work/Tasks\". Rescan needed for
-effect.")
+Changes to this variable take effect immediately without rescanning."
+  :type '(repeat
+          (choice (const :tag "No grouping" nil)
+                  (const :tag "Source filename" file)
+                  (const :tag "Full heading path" path)
+                  (const :tag "Immediate parent heading" parent)))
+  :group 'lorg)
 
 (defvar lorg-group-breadcrumbs-splitter "/"
   "String needed to join breadcrumb segments.
-Rescan needed for effect.")
+Rescan is needed for effect.")
+
+(defvar lorg-group-file-splitter ":"
+  "String needed to join file with breadcrumb.
+Rescan is not needed for effect.")
 
 (defvar lorg--links-cache-alist nil
   "Internal cache of scanned links.
-An alist of (DESCRIPTION URI . HEADING) pairs collected from scanned files.")
+An alist of (DESCRIPTION . ((URI . FILENAME) . HEADING)) pairs collected
+from scanned files.")
 
 (defun lorg--scan-file (file)
   "Scan FILE for Org links and populate `lorg--links-cache-alist'.
 Stop scanning when `lorg-max-links' entries have been added. Each link's
 description and URI (type & path) are stored in the cache."
   (with-temp-buffer
-    (let ((org-inhibit-startup t)
-          (org-element-cache-persistent)
-          (org-element-use-cache)
-          (org-mode-hook)
-          (gc-cons-threshold 100000000) ; 100mb
-          (coding-system-for-read 'utf-8))
+    (let* ((filename (file-name-nondirectory file))
+           (org-inhibit-startup t)
+           (org-element-cache-persistent)
+           (org-element-use-cache)
+           (org-mode-hook)
+           (gc-cons-threshold 100000000) ; 100mb
+           (coding-system-for-read 'utf-8))
       (org-mode)
       (buffer-disable-undo)
       (insert-file-contents file)
@@ -100,7 +125,8 @@ description and URI (type & path) are stored in the cache."
                          (org-element-property :path context))))
             (if (and description type path)
                 (let ((uri (concat type ":" path)))
-                  (push (cons description (cons uri heading)) lorg--links-cache-alist)
+                  (push (cons description (cons (cons uri filename) heading))
+                        lorg--links-cache-alist)
                   (when (>= (length lorg--links-cache-alist) lorg-max-links)
                     (throw 'max-limit-reached t))))))))))
 
@@ -227,11 +253,12 @@ Each element may be a regular file or a directory."
 This function returns the URI for STR as a right aligned annotation."
   (let ((entry (assoc str lorg--links-cache-alist)))
     (when entry
-      (concat " "
-              (propertize " " 'display '(space :align-to 40))
-              (propertize (or (cadr entry) "No uri")
-                          'face (or 'marginalia-documentation
-                                    'font-lock-comment-face))))))
+      (let ((uri (caadr entry)))
+        (concat " "
+                (propertize " " 'display '(space :align-to 40))
+                (propertize (or uri "No uri")
+                            'face (or 'marginalia-documentation
+                                      'font-lock-comment-face)))))))
 
 (defun lorg--affixation-function (cands)
   "Affixation function for completion display.
@@ -248,7 +275,7 @@ SUFFIX)"
          (let* ((desc cand)
                 (entry (assoc cand lorg--links-cache-alist))
                 (len (length desc))
-                (uri (cadr entry))
+                (uri (caadr entry))
                 (spaces (make-string (- margin len) ?\s)))
            (list desc nil
                  (concat spaces
@@ -274,11 +301,22 @@ When TRANSFORM is nil, return the org-heading for CAND.
 When TRANSFORM is non-nil, return CAND unchanged."
   (if transform
       cand
-    (let* ((entry (assoc cand lorg--links-cache-alist))
-           (heading (cddr entry)))
-      (if (and heading (not lorg-group-use-breadcrumbs))
-          (car (last (split-string heading lorg-group-breadcrumbs-splitter)))
-        (or heading "(No Heading)")))))
+    (if (null lorg-group-by)
+        nil
+      (let* ((entry (assoc cand lorg--links-cache-alist))
+             (uri+file (cadr entry))    ; (URI . FILENAME)
+             (file (cdr uri+file))
+             (heading (cddr entry))     ; full path heading
+             (use-parent (memq 'parent lorg-group-by))
+             (use-file (memq 'file lorg-group-by))
+             (use-path (memq 'path lorg-group-by)))
+        (cond
+         ((and use-file use-path) (or (and heading (concat file lorg-group-file-splitter heading)) file))
+         ((and use-file use-parent) (or (and heading (concat file lorg-group-file-splitter (car (last (split-string heading lorg-group-breadcrumbs-splitter))))) file))
+         (use-file (or file "(No File)"))
+         (use-parent (or (and heading (car (last (split-string heading lorg-group-breadcrumbs-splitter)))) "(No Heading)"))
+         (use-path (or heading "(No Heading)"))
+         (t "(No Group)"))))))
 
 (defun lorg--completion-function (str pred flag)
   "Completion function for `completing-read'.
@@ -290,8 +328,7 @@ PRED."
            (category . lorg)
            (group-function . lorg--group-function)
            (annotation-function . lorg--annotation-function)
-           (affixation-function . lorg--affixation-function)
-           ))
+           (affixation-function . lorg--affixation-function)))
         (t
          (all-completions str (mapcar 'car lorg--links-cache-alist) pred))))
 
@@ -304,7 +341,7 @@ from `lorg-files' first."
     (setq lorg--links-cache-alist nil)
     (lorg--rescan-files lorg-files))
   (let* ((choice (completing-read prompt #'lorg--completion-function nil t))
-         (uri (cadr (assoc choice lorg--links-cache-alist))))
+         (uri (caadr (assoc choice lorg--links-cache-alist))))
     (funcall handler uri)))
 
 ;;;###autoload
