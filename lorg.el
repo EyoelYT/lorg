@@ -165,28 +165,49 @@ description and URI (type & path) are stored in the cache."
            (org-element-use-cache)
            (org-mode-hook)
            (gc-cons-threshold 100000000) ; 100mb
-           (coding-system-for-read 'utf-8))
+           (coding-system-for-read 'utf-8)
+           (heading-stack nil)          ; List of '(level title) entries
+           (count (lorg--cache-count)))
       (org-mode)
       (buffer-disable-undo)
       (insert-file-contents file)
-      (let ((count (lorg--cache-count)))
-        (catch 'max-limit-reached
-          (while (re-search-forward lorg-link-re nil t)
-            (let* ((uri (match-string-no-properties 2))
-                   (description (or (match-string-no-properties 3) uri))
-                   (heading (save-excursion
-                              (org-up-heading-safe)
-                              (lorg--get-breadcrumbs)))
-                   (context (org-element-lineage (org-element-context) 'link t))
-                   (type (org-element-property :type context))
-                   (path (if (equal type "file")
-                             (expand-file-name (org-element-property :path context))
-                           (org-element-property :path context))))
-              (if (and description type path)
-                  (let ((uri (concat type ":" path)))
-                    (lorg--cache-put description uri filename heading)
-                    (when (>= (setq count (+ count 1)) lorg-max-links)
-                      (throw 'max-limit-reached t)))))))))))
+      (goto-char (point-min))
+      (catch ':max-limit-reached
+        (while (not (eobp))
+          ;; Search for links on this line
+          (let ((eol (line-end-position)))
+            (while (re-search-forward lorg-link-re eol t)
+              (let* ((raw-uri (match-string-no-properties 2))
+                     (description (or (match-string-no-properties 3) raw-uri)))
+                (when raw-uri
+                  (let* ((type nil) (path nil))
+                    (cond
+                     ((string-match "\\`\\([a-zA-Z][a-zA-Z0-9+.-]*\\):\\(.*\\)" raw-uri)
+                      ;; type:path (http:, file:, id:, mailto:, info:, ...)
+                      (setq type (match-string 1 raw-uri)
+                            path (match-string 2 raw-uri)))
+                     ((string-match "\\`[/~.]" raw-uri)
+                      (setq type "file"
+                            path raw-uri)))
+                    (let ((uri (concat type ":" path))
+                          (heading (when heading-stack
+                                     (mapconcat #'cdr
+                                                (reverse heading-stack)
+                                                lorg-group-breadcrumbs-splitter))))
+                      (lorg--cache-put description uri filename heading)
+                      (when (>= (setq count (+ count 1)) lorg-max-links)
+                        (throw ':max-limit-reached t))))))))
+          ;; Update heading stack on a heading line
+          (beginning-of-line)
+          (when (org-at-heading-p)
+            (let* ((level (org-current-level))
+                   (title (org-link-display-format
+                           (substring-no-properties
+                            (org-get-heading t t t t)))))
+              (while (and heading-stack (>= (caar heading-stack) level))
+                (pop heading-stack))
+              (push (cons level title) heading-stack)))
+          (forward-line 1))))))
 
 (defun lorg--get-ext-globs (exts)
   "Return shell glob patterns for each extension in EXTS.
@@ -340,25 +361,6 @@ SUFFIX)"
                          (propertize uri 'face (or 'marginalia-documentation
                                                    'font-lock-comment-face))))))
        cands))))
-
-(defun lorg--get-breadcrumbs ()
-  "Return the heading breadcrumb path at point as a string.
-Walks up the heading hierarchy collecting headings, then joins them with
-`lorg-group-breadcrumbs-splitter'. Return nil if point is not under any
-heading."
-  (let ((breadcrumbs nil))
-    (save-excursion
-      (condition-case nil
-          (org-back-to-heading t)
-        (user-error (goto-char (point-min))))
-      (while (not (bobp))
-        (push (org-link-display-format
-               (substring-no-properties (org-get-heading t t t t)))
-              breadcrumbs)
-        (unless (org-up-heading-safe)
-          (goto-char (point-min))))
-      (when breadcrumbs
-        (string-join breadcrumbs lorg-group-breadcrumbs-splitter)))))
 
 (defun lorg--group-function (cand transform)
   "Group completion candidates according to `lorg-group-by'.
