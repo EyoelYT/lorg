@@ -77,18 +77,16 @@ Examples:
   '(parent path)   - parent takes precedence (same as '(parent))
 
 Changes to this variable take effect immediately without rescanning."
-  :type '(repeat
-          (choice (const :tag "No grouping" nil)
-                  (const :tag "Source filename" file)
-                  (const :tag "Full heading path" path)
-                  (const :tag "Immediate parent heading" parent)))
+  :type '(set (const :tag "Source filename" file)
+          (const :tag "Full heading path" path)
+          (const :tag "Immediate parent heading" parent))
   :group 'lorg)
 
 (defvar lorg-group-breadcrumbs-splitter "/"
   "String needed to join breadcrumb segments.
 Rescan is needed for effect.")
 
-(defvar lorg-group-file-splitter ":"
+(defvar lorg-group-file-splitter "::"
   "String needed to join file with breadcrumb.
 Rescan is not needed for effect.")
 
@@ -265,7 +263,7 @@ This function returns the URI for STR as a right aligned annotation."
   "Affixation function for completion display.
 Aligns link descriptions and URLs in a columnar format. CANDS is a list
 of completion candidates. This function looks up each candidate in
-`lorg--links-cache-alist' and returns a list of (PREFIX DESCRIPTION
+`lorg--links-cache-alist' and returns a list of (CANDIDATE DESCRIPTION
 SUFFIX)"
   (when cands
     (let* ((max-margin 50)
@@ -319,8 +317,8 @@ configured."
              (use-file (memq 'file lorg-group-by))
              (use-path (memq 'path lorg-group-by)))
         (cond
-         ((and use-file use-path) (or (and heading (concat file lorg-group-file-splitter heading)) file))
          ((and use-file use-parent) (or (and heading (concat file lorg-group-file-splitter (car (last (split-string heading lorg-group-breadcrumbs-splitter))))) file))
+         ((and use-file use-path) (or (and heading (concat file lorg-group-file-splitter heading)) file))
          (use-file (or file "(No File)"))
          (use-parent (or (and heading (car (last (split-string heading lorg-group-breadcrumbs-splitter)))) "(No Heading)"))
          (use-path (or heading "(No Heading)"))
@@ -328,9 +326,9 @@ configured."
 
 (defun lorg--completion-function (str pred flag)
   "Completion function for `completing-read'.
-When FLAG is 'metadata, return an annotation specification that shows
-the target URI, and groups by heading. Otherwise, filter completions by
-PRED."
+When FLAG is \\='metadata, return a metadata specification with
+annotation, affixation, and grouping.  Otherwise, filter
+completions matching STR by PRED."
   (cond ((eq flag 'metadata)
          `(metadata
            (category . lorg)
