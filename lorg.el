@@ -307,7 +307,8 @@ heading."
           (org-back-to-heading t)
         (user-error (goto-char (point-min))))
       (while (not (bobp))
-        (push (substring-no-properties (org-get-heading t t t t))
+        (push (org-link-display-format
+               (substring-no-properties (org-get-heading t t t t)))
               breadcrumbs)
         (unless (org-up-heading-safe)
           (goto-char (point-min))))
