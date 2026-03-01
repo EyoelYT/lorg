@@ -291,7 +291,9 @@ Walks up the heading hierarchy collecting headings, then joins them with
 heading."
   (let ((breadcrumbs nil))
     (save-excursion
-      (org-back-to-heading t)
+      (condition-case nil
+          (org-back-to-heading t)
+        (user-error (goto-char (point-min))))
       (while (not (bobp))
         (push (substring-no-properties (org-get-heading t t t t))
               breadcrumbs)
