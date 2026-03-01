@@ -371,11 +371,5 @@ With prefix ARG, force a rescan before prompting."
   (interactive "P")
   (lorg-menu-ask "Link: " #'org-link-open-from-string (and arg)))
 
-;;;###autoload
-(defun lorg-menu-rescan ()
-  "Force a rescan of all `lorg-files' and then prompt to open a link."
-  (interactive)
-  (lorg-menu-ask "Link: " #'org-link-open-from-string t))
-
 (provide 'lorg)
 ;;; lorg.el ends here
