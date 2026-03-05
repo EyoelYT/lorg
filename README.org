@@ -20,7 +20,7 @@ Scans files and directories for org-style links, caches them, and provides an in
 *** Use-Package
 
 #+begin_src emacs-lisp
-(use-package! lorg
+(use-package lorg
   :load-path "/path/to/lorg-directory"
   :defer t
   :commands (lorg-menu)
