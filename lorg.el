@@ -56,7 +56,14 @@ prevent excessive memory usage."
   :group 'lorg)
 
 (defcustom lorg-extensions '("org")
-  "List of file extensions (without dot) to scan.
+  "List of file extensions (without dot) to scan for org-style links.
+Extensions may include encrypted variants; files ending
+in \".<ext>.gpg\" or \".<ext>.age\" are also matched automatically."
+  :type '(repeat string)
+  :group 'lorg)
+
+(defcustom lorg-markdown-extensions '("md" "markdown")
+  "List of file extensions (without dot) to scan for markdown-style links.
 Extensions may include encrypted variants; files ending
 in \".<ext>.gpg\" or \".<ext>.age\" are also matched automatically."
   :type '(repeat string)
@@ -154,7 +161,7 @@ Return ((URI . FILENAME) . HEADING) or nil"
       (hash-table-count lorg--cache)
     (length lorg--cache)))
 
-(defun lorg--scan-file (file)
+(defun lorg--scan-org-file (file)
   "Scan FILE for Org links and populate `lorg--links-cache-alist'.
 Stop scanning when `lorg-max-links' entries have been added. Each link's
 description and URI (type & path) are stored in the cache."
@@ -209,6 +216,69 @@ description and URI (type & path) are stored in the cache."
               (push (cons level title) heading-stack)))
           (forward-line 1))))))
 
+(defun lorg--scan-md-file (file)
+  "Scan markdown FILE for links and populate the link cache.
+Stop scanning when `lorg-max-links' entries have been added."
+  (with-temp-buffer
+    (let* ((filename (file-name-nondirectory file))
+           (gc-cons-threshold 100000000)
+           (coding-system-for-read 'utf-8)
+           (md-heading-re "^\\(#+\\) +\\(.*\\)")
+           (md-link-re "!?\\[\\([^]]+\\)\\](\\([^)]*\\))")
+           (heading-stack nil)
+           (count (lorg--cache-count)))
+      (buffer-disable-undo)
+      (insert-file-contents file)
+      (goto-char (point-min))
+      (catch ':max-limit-reached
+        (while (not (eobp))             ; until the end of the buffer
+          ;; Search for links on the current line
+          (let ((eol (line-end-position)))
+            (while (re-search-forward md-link-re eol t)
+              (let* ((description (match-string-no-properties 1))
+                     (raw-uri (match-string-no-properties 2))
+                     (type nil) (path nil))
+                (when raw-uri
+                  (cond                 ; get link-type and link-path
+                   ((string-match "\\`\\([a-zA-Z][a-zA-Z0-9+.-]*\\):\\(.*\\)" raw-uri) ; web-link
+                    (setq type (match-string 1 raw-uri)
+                          path (match-string 2 raw-uri)))
+                   ((string-match "\\`[/~.]" raw-uri) ; file
+                    (setq type "file"
+                          path raw-uri)))
+                  (when (and type path)
+                    (when (equal type "file")
+                      (setq path (expand-file-name path)))
+                    (let ((uri (concat type ":" path))
+                          (heading (when heading-stack ; get heading by reversing & concating the heading stack
+                                     (mapconcat #'cdr
+                                                (reverse heading-stack)
+                                                lorg-group-breadcrumbs-splitter))))
+                      (lorg--cache-put description uri filename heading)
+                      (when (>= (setq count (+ count 1)) lorg-max-links)
+                        (throw ':max-limit-reached t))))))))
+          ;; Update heading stack if heading is found
+          (beginning-of-line)
+          (when (looking-at md-heading-re)
+            (let* ((level (length (match-string 1)))
+                   (title (string-trim-right (match-string-no-properties 2) "[ \t]+#+[ \t]*")))
+              (while (and heading-stack (>= (caar heading-stack) level))
+                (pop heading-stack))
+              (push (cons level title) heading-stack)))
+          (forward-line 1))))))
+
+(defun lorg--scan-file (file)
+  "Call the appropriate scanner on FILE based on its extension."
+  (let* ((name (file-name-nondirectory file))
+         (base (if (string-match "\\.\\(gpg\\|age\\)\\'" name)
+                   (file-name-sans-extension name)
+                 name))
+         (ext (file-name-extension base)))
+    (cond ((member ext lorg-markdown-extensions)
+           (lorg--scan-md-file file))
+          ((member ext lorg-extensions)
+           (lorg--scan-org-file file)))))
+
 (defun lorg--get-ext-globs (exts)
   "Return shell glob patterns for each extension in EXTS.
 For each EXT in EXTS, produce \"*.EXT\", \"*.EXT.gpg\", and
@@ -232,15 +302,20 @@ For each EXT in EXTS, produce EXT, \"EXT.gpg\", and \"EXT.age\"."
   "Build a regex matching any extension in EXTS followed by end of string."
   (rx-to-string `(or ,@exts) t))
 
+(defun lorg--all-extensions ()
+  "Return the combined list of org and markdown extensions."
+  (append lorg-extensions lorg-markdown-extensions))
+
 (defun lorg--scan-directory (dir)
-  "Scan directory DIR recursively for files matching `lorg-extensions'.
+  "Scan directory DIR recursively for files matching all known extensions.
 Tries `fd', `rg', `find', and a native Elisp fallback in that order,
 using the first that succeeds to list files, then scans each for links."
-  (when-let* ((files (or (lorg--fd--fetch-files dir)
-                         (lorg--rg--fetch-files dir)
-                         (lorg--find--fetch-files dir)
-                         (lorg--native--fetch-files dir))))
-    (lorg--rescan-files files)))
+  (let ((exts (lorg--all-extensions)))
+    (when-let* ((files (or (lorg--fd--fetch-files dir exts)
+                           (lorg--rg--fetch-files dir exts)
+                           (lorg--find--fetch-files dir exts)
+                           (lorg--native--fetch-files dir exts))))
+      (lorg--rescan-files files))))
 
 (defun lorg--shell-command-to-list (cmd)
   "Execute shell command CMD and return non-blank output lines as a list of
@@ -249,11 +324,11 @@ strings."
               (split-string
                (ansi-color-filter-apply (shell-command-to-string cmd)) "\n")))
 
-(defun lorg--find--fetch-files (dir)
-  "Use \"find\" to list all files under DIR matching `lorg-extensions'."
+(defun lorg--find--fetch-files (dir exts)
+  "Use \"find\" to list all files under DIR matching EXTS."
   (let ((exe (executable-find "find")))
-    (if (and exe lorg-extensions (file-directory-p dir))
-        (let* ((globs (lorg--get-ext-globs lorg-extensions))
+    (if (and exe exts (file-directory-p dir))
+        (let* ((globs (lorg--get-ext-globs exts))
                (exts (string-join (mapcar (lambda (glob)
                                             (concat "-name " glob))
                                           globs)
@@ -268,11 +343,11 @@ strings."
           (lorg--shell-command-to-list command))
       nil)))
 
-(defun lorg--fd--fetch-files (dir)
-  "Use \"fd\" to list all files under DIR matching `lorg-extensions'."
+(defun lorg--fd--fetch-files (dir exts)
+  "Use \"fd\" to list all files under DIR matching EXTS."
   (let ((exe (executable-find "fd")))
-    (if (and exe lorg-extensions (file-directory-p dir))
-        (let* ((globs (lorg--get-ext-globs lorg-extensions))
+    (if (and exe exts (file-directory-p dir))
+        (let* ((globs (lorg--get-ext-globs exts))
                (exts (string-join (mapcar (lambda (glob)
                                             (concat "-e " (substring glob 2 -1)))
                                           globs)
@@ -287,11 +362,11 @@ strings."
           (lorg--shell-command-to-list command))
       nil)))
 
-(defun lorg--rg--fetch-files (dir)
-  "Use \"ripgrep\" to list all files under DIR matching `lorg-extensions'."
+(defun lorg--rg--fetch-files (dir exts)
+  "Use \"ripgrep\" to list all files under DIR matching EXTS'."
   (let ((exe (executable-find "rg")))
-    (if (and exe lorg-extensions (file-directory-p dir))
-        (let* ((globs (lorg--get-ext-globs lorg-extensions))
+    (if (and exe exts (file-directory-p dir))
+        (let* ((globs (lorg--get-ext-globs exts))
                (command (string-join `(,exe
                                        "-L"
                                        ,(shell-quote-argument dir)
@@ -303,12 +378,12 @@ strings."
           (lorg--shell-command-to-list command))
       nil)))
 
-(defun lorg--native--fetch-files (dir)
-  "Recursively list all files under DIR matching `lorg-extensions'.
+(defun lorg--native--fetch-files (dir exts)
+  "Recursively list all files under DIR matching EXTS.
 This is a pure Elisp implementation that doesn't require external tools."
-  (when (and lorg-extensions (file-directory-p dir))
-    (let* ((exts (lorg--get-ext-list lorg-extensions))
-           (exts-regexp (lorg--build-ext-regex exts))
+  (when (and exts (file-directory-p dir))
+    (let* ((all-exts (lorg--get-ext-list exts))
+           (exts-regexp (lorg--build-ext-regex all-exts))
            (cands (directory-files-recursively dir exts-regexp t))
            (matches))
       (dolist (file cands matches)
