@@ -14,10 +14,11 @@
 ;;
 ;;; Commentary:
 ;;
-;; Lorg provides a lightweight, Org-mode–based link manager.
-;; It scans one or more directories or files for org-style links,
-;; caches them up to a configurable maximum, and provides an
-;; interactive menu to quickly open any link by its description.
+;; Lorg provides a lightweight link manager.
+;;
+;; It scans one or more directories or files for links, caches them up to a
+;; configurable maximum, and provides an interactive menu to quickly open any
+;; link by its description.
 ;;
 ;;  Usage
 ;;
@@ -33,13 +34,13 @@
 (require 'ansi-color)
 
 (defgroup lorg nil
-  "Org-Mode based link manager."
+  "Link manager for Org and Markdown files."
   :group 'org
   :prefix "lorg-"
   :link '(url-link :tag "Github" "https://github.com/eyoelyt/lorg"))
 
 (defcustom lorg-files nil
-  "List of files or directories to scan for Org links.
+  "List of files or directories to scan for links.
 Each element is either a path to a file or a directory.
 Directories are searched recursively for files matching
 `lorg-extensions'."
@@ -162,7 +163,7 @@ Return ((URI . FILENAME) . HEADING) or nil"
     (length lorg--cache)))
 
 (defun lorg--scan-org-file (file)
-  "Scan FILE for Org links and populate `lorg--links-cache-alist'.
+  "Scan FILE for Org links and populate the links cache.
 Stop scanning when `lorg-max-links' entries have been added. Each link's
 description and URI (type & path) are stored in the cache."
   (with-temp-buffer
@@ -392,7 +393,7 @@ This is a pure Elisp implementation that doesn't require external tools."
       matches)))
 
 (defun lorg--rescan-files (files)
-  "Scan each element of FILES for Org links.
+  "Scan each element of FILES for links.
 Each element may be a regular file or a directory."
   (let* ((file)
          (inhibit-read-only t))
@@ -417,9 +418,8 @@ This function returns the URI for DESC as a right aligned annotation."
 (defun lorg--affixation-function (cands)
   "Affixation function for completion display.
 Aligns link descriptions and URLs in a columnar format. CANDS is a list
-of completion candidates. This function looks up each candidate in
-`lorg--links-cache-alist' and returns a list of (CANDIDATE DESCRIPTION
-SUFFIX)"
+of completion candidates. This function looks up each candidate in the
+links cache and returns a list of (CANDIDATE DESCRIPTION SUFFIX)"
   (when cands
     (let* ((max-margin 50)
            (lens (mapcar (lambda (cand) (length cand)) cands))
@@ -477,8 +477,8 @@ completions matching STR by PRED."
 
 (defun lorg-menu-ask (prompt handler &optional force-rescan)
   "Prompt with PROMPT and call HANDLER with the selected link's URI.
-If FORCE-RESCAN is non-nil or `lorg--links-cache-alist' is empty,
-refresh the link cache from `lorg-files' before prompting."
+If FORCE-RESCAN is non-nil or the links cache is empty, refresh the link
+cache from `lorg-files' before prompting."
   (when (or (lorg--cache-empty-p) force-rescan)
     (lorg--cache-clear)
     (lorg--rescan-files lorg-files))
@@ -488,7 +488,7 @@ refresh the link cache from `lorg-files' before prompting."
 
 ;;;###autoload
 (defun lorg-menu (&optional arg)
-  "Interactively select and open an Org link from `lorg-files'.
+  "Interactively select and open a link from `lorg-files'.
 With prefix ARG, force a rescan before prompting."
   (interactive "P")
   (lorg-menu-ask "Link: " #'org-link-open-from-string (and arg)))
