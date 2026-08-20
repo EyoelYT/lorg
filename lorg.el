@@ -466,14 +466,13 @@ configured."
 When FLAG is \\='metadata, return a metadata specification with
 annotation, affixation, and grouping.  Otherwise, filter
 completions matching STR by PRED."
-  (cond ((eq flag 'metadata)
-         `(metadata
-           (category . lorg)
-           (group-function . lorg--group-function)
-           (annotation-function . lorg--annotation-function)
-           (affixation-function . lorg--affixation-function)))
-        (t
-         (all-completions str (lorg--cache-keys) pred))))
+  (if (eq flag 'metadata)
+      `(metadata
+        (category . lorg)
+        (group-function . lorg--group-function)
+        (annotation-function . lorg--annotation-function)
+        (affixation-function . lorg--affixation-function))
+    (complete-with-action flag (lorg--cache-keys) str pred)))
 
 (defun lorg-menu-ask (prompt handler &optional force-rescan)
   "Prompt with PROMPT and call HANDLER with the selected link's URI.
