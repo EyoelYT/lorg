@@ -406,6 +406,12 @@ Each element may be a regular file or a directory."
             ((file-directory-p file)
              (lorg--scan-directory file))))))
 
+(defun lorg--doc-face ()
+  "Return the face used for lorg URI annotations"
+  (if (facep 'marginalia-documentation)
+      'marginalia-documentation
+    'font-lock-comment-face))
+
 (defun lorg--annotation-function (desc)
   "Annotation function for completion candidates.
 This function returns the URI for DESC as a right aligned annotation."
@@ -414,9 +420,7 @@ This function returns the URI for DESC as a right aligned annotation."
       (let ((uri (caar entry)))
         (concat " "
                 (propertize " " 'display '(space :align-to 40))
-                (propertize (or uri "No uri")
-                            'face (or 'marginalia-documentation
-                                      'font-lock-comment-face)))))))
+                (propertize (or uri "No uri") 'face (lorg--doc-face)))))))
 
 (defun lorg--affixation-function (cands)
   "Affixation function for completion display.
@@ -436,8 +440,7 @@ links cache and returns a list of (CANDIDATE DESCRIPTION SUFFIX)"
                 (spaces (make-string (- margin len) ?\s)))
            (list desc ""
                  (concat spaces
-                         (propertize uri 'face (or 'marginalia-documentation
-                                                   'font-lock-comment-face))))))
+                         (propertize uri 'face (lorg--doc-face))))))
        cands))))
 
 (defun lorg--group-function (cand transform)
