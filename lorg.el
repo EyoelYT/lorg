@@ -30,8 +30,11 @@
 ;;; Code:
 
 (require 'org)
+(require 'org-element)
 (require 'seq)
 (require 'ansi-color)
+(require 'subr-x)
+(require 'rx)
 
 (defgroup lorg nil
   "Link manager for Org and Markdown files."
