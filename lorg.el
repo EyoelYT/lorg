@@ -434,7 +434,7 @@ links cache and returns a list of (CANDIDATE DESCRIPTION SUFFIX)"
                 (len (length desc))
                 (uri (caar entry))
                 (spaces (make-string (- margin len) ?\s)))
-           (list desc nil
+           (list desc ""
                  (concat spaces
                          (propertize uri 'face (or 'marginalia-documentation
                                                    'font-lock-comment-face))))))
