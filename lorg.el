@@ -436,7 +436,7 @@ links cache and returns a list of (CANDIDATE DESCRIPTION SUFFIX)"
          (let* ((desc cand)
                 (entry (lorg--cache-get cand))
                 (len (length desc))
-                (uri (caar entry))
+                (uri (or (caar entry) ""))
                 (spaces (make-string (- margin len) ?\s)))
            (list desc ""
                  (concat spaces
