@@ -56,7 +56,7 @@ Directories are searched recursively for files matching
   "Maximum number of links to cache.
 Once this limit is reached during a scan, further links are ignored to
 prevent excessive memory usage."
-  :type 'natnum
+  :type 'integer
   :group 'lorg)
 
 (defcustom lorg-extensions '("org")
