@@ -200,14 +200,15 @@ description and URI (type & path) are stored in the cache."
                      ((string-match "\\`[/~.]" raw-uri)
                       (setq type "file"
                             path raw-uri)))
-                    (let ((uri (concat type ":" path))
-                          (heading (when heading-stack
-                                     (mapconcat #'cdr
-                                                (reverse heading-stack)
-                                                lorg-group-breadcrumbs-splitter))))
-                      (lorg--cache-put description uri filename heading)
-                      (when (>= (setq count (+ count 1)) lorg-max-links)
-                        (throw 'max-limit-reached t))))))))
+                    (when (and type path)
+                      (let ((uri (concat type ":" path))
+                            (heading (when heading-stack
+                                       (mapconcat #'cdr
+                                                  (reverse heading-stack)
+                                                  lorg-group-breadcrumbs-splitter))))
+                        (lorg--cache-put description uri filename heading)
+                        (when (>= (setq count (+ count 1)) lorg-max-links)
+                          (throw 'max-limit-reached t)))))))))
           ;; Update heading stack on a heading line
           (beginning-of-line)
           (when (org-at-heading-p)
