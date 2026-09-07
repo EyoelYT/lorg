@@ -253,7 +253,8 @@ Stop scanning when `lorg-max-links' entries have been added."
                           path raw-uri)))
                   (when (and type path)
                     (when (equal type "file")
-                      (setq path (expand-file-name path)))
+                      (setq path (expand-file-name
+                                  path (file-name-directory (expand-file-name file)))))
                     (let ((uri (concat type ":" path))
                           (heading (when heading-stack ; get heading by reversing & concating the heading stack
                                      (mapconcat #'cdr
