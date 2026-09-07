@@ -47,9 +47,7 @@
 Each element is either a path to a file or a directory.
 Directories are searched recursively for files matching
 `lorg-extensions'."
-  :type '(choice
-          (repeat :tag "List of files and directories" file)
-          (file :tag "Store list in a file\n" :value "~/.agenda_files"))
+  :type '(repeat :tag "List of files and directories" file)
   :group 'lorg)
 
 (defcustom lorg-max-links 1000
