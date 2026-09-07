@@ -304,7 +304,7 @@ For each EXT in EXTS, produce EXT, \"EXT.gpg\", and \"EXT.age\"."
 
 (defun lorg--build-ext-regex (exts)
   "Build a regex matching any extension in EXTS followed by end of string."
-  (rx-to-string `(or ,@exts) t))
+  (rx-to-string `(seq "." (or ,@exts) eos) t))
 
 (defun lorg--all-extensions ()
   "Return the combined list of org and markdown extensions."
