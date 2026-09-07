@@ -481,6 +481,17 @@ completions matching STR by PRED."
         (affixation-function . lorg--affixation-function))
     (complete-with-action flag (lorg--cache-keys) str pred)))
 
+(defun lorg-open-link (uri)
+  "Open a link URI using Org mode's link opening mechanism.
+
+It takes a URI string, converts it to an Org link format, and opens it
+using `org-link-open-from-string'. This provides a unified interface
+for opening various link types (http, file, etc.) supported by Org mode.
+
+Example:
+  (lorg-open-link \"https://example.com\")"
+  (org-link-open-from-string (org-link-make-string uri)))
+
 (defun lorg-menu-ask (prompt handler &optional force-rescan)
   "Prompt with PROMPT and call HANDLER with the selected link's URI.
 If FORCE-RESCAN is non-nil or the links cache is empty, refresh the link
@@ -490,14 +501,16 @@ cache from `lorg-files' before prompting."
     (lorg--rescan-files lorg-files))
   (let* ((choice (completing-read prompt #'lorg--completion-function nil t))
          (uri (caar (lorg--cache-get choice))))
-    (funcall handler uri)))
+    (if uri
+        (funcall handler uri)
+      (user-error "No link URI for %S" choice))))
 
 ;;;###autoload
 (defun lorg-menu (&optional arg)
   "Interactively select and open a link from `lorg-files'.
 With prefix ARG, force a rescan before prompting."
   (interactive "P")
-  (lorg-menu-ask "Link: " #'org-link-open-from-string (and arg)))
+  (lorg-menu-ask "Link: " #'lorg-open-link (and arg)))
 
 (provide 'lorg)
 ;;; lorg.el ends here
