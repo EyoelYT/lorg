@@ -460,12 +460,30 @@ configured."
              (use-file (memq 'file lorg-group-by))
              (use-path (memq 'path lorg-group-by)))
         (cond
-         ((and use-file use-parent) (or (and heading (concat file lorg-group-file-splitter (car (last (split-string heading lorg-group-breadcrumbs-splitter))))) file))
-         ((and use-file use-path) (or (and heading (concat file lorg-group-file-splitter heading)) file))
-         (use-file (or file "(No File)"))
-         (use-parent (or (and heading (car (last (split-string heading lorg-group-breadcrumbs-splitter)))) "(No Heading)"))
-         (use-path (or heading "(No Heading)"))
-         (t "(No Group)"))))))
+         ((and use-file use-parent)
+          (or (and heading
+                   (concat file
+                           lorg-group-file-splitter
+                           (car (last
+                                 (split-string heading
+                                               (regexp-quote lorg-group-breadcrumbs-splitter))))))
+              file))
+         ((and use-file use-path)
+          (or (and heading
+                   (concat file lorg-group-file-splitter heading))
+              file))
+         (use-file
+          (or file "(No File)"))
+         (use-parent
+          (or (and heading
+                   (car (last
+                         (split-string heading
+                                       (regexp-quote lorg-group-breadcrumbs-splitter)))))
+              "(No Heading)"))
+         (use-path
+          (or heading "(No Heading)"))
+         (t
+          "(No Group)"))))))
 
 (defun lorg--completion-function (str pred flag)
   "Completion function for `completing-read'.
