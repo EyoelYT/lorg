@@ -183,7 +183,7 @@ description and URI (type & path) are stored in the cache."
       (buffer-disable-undo)
       (insert-file-contents file)
       (goto-char (point-min))
-      (catch ':max-limit-reached
+      (catch 'max-limit-reached
         (while (not (eobp))
           ;; Search for links on this line
           (let ((eol (line-end-position)))
@@ -207,7 +207,7 @@ description and URI (type & path) are stored in the cache."
                                                 lorg-group-breadcrumbs-splitter))))
                       (lorg--cache-put description uri filename heading)
                       (when (>= (setq count (+ count 1)) lorg-max-links)
-                        (throw ':max-limit-reached t))))))))
+                        (throw 'max-limit-reached t))))))))
           ;; Update heading stack on a heading line
           (beginning-of-line)
           (when (org-at-heading-p)
@@ -234,7 +234,7 @@ Stop scanning when `lorg-max-links' entries have been added."
       (buffer-disable-undo)
       (insert-file-contents file)
       (goto-char (point-min))
-      (catch ':max-limit-reached
+      (catch 'max-limit-reached
         (while (not (eobp))             ; until the end of the buffer
           ;; Search for links on the current line
           (let ((eol (line-end-position)))
@@ -260,7 +260,7 @@ Stop scanning when `lorg-max-links' entries have been added."
                                                 lorg-group-breadcrumbs-splitter))))
                       (lorg--cache-put description uri filename heading)
                       (when (>= (setq count (+ count 1)) lorg-max-links)
-                        (throw ':max-limit-reached t))))))))
+                        (throw 'max-limit-reached t))))))))
           ;; Update heading stack if heading is found
           (beginning-of-line)
           (when (looking-at md-heading-re)
