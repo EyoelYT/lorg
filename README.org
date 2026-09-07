@@ -2,7 +2,7 @@
 
 A lightweight link manager for Emacs.
 
-Scans files and directories for for Org and Markdown links, caches them, and provides an interactive menu to quickly open any link by its description.
+Scans files and directories for Org and Markdown links, caches them, and provides an interactive menu to quickly open any of these links from anywhere in Emacs.
 
 ** Requirements
 
@@ -43,7 +43,3 @@ Scans files and directories for for Org and Markdown links, caches them, and pro
 - =lorg-extensions= :: Org file extensions to match (=.gpg= / =.age= variants are included automatically)
 - =lorg-max-links= :: Max links to be stored in cache
 - =lorg-group-by= :: Grouping: any combination of =file=, =path=, =parent=
-
-** File discovery
-
-Tries these tools in order: =fd=, =rg=, =find=, native Elisp fallback; and uses the first available one.
