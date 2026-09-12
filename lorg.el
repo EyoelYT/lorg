@@ -347,6 +347,7 @@ strings."
                (command (string-join `(,exe
                                        "-L"
                                        ,(shell-quote-argument dir)
+                                       "-name .git -prune -o"
                                        "-type f \\("
                                        ,exts
                                        "\\)")
@@ -364,7 +365,8 @@ strings."
                                           globs)
                                   " "))
                (command (string-join `(,exe
-                                       "-L"
+                                       "-L" "--hidden" "--no-ignore"
+                                       "--exclude" ".git"
                                        "--type file"
                                        ,exts
                                        "."
@@ -379,7 +381,8 @@ strings."
     (if (and exe exts (file-directory-p dir))
         (let* ((globs (lorg--get-ext-globs exts))
                (command (string-join `(,exe
-                                       "-L"
+                                       "-L" "--hidden" "--no-ignore"
+                                       "-g" "!.git/"
                                        ,(shell-quote-argument dir)
                                        "--files"
                                        ,@(mapcar (lambda (glob)
