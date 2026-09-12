@@ -186,7 +186,11 @@ description and URI (type & path) are stored in the cache."
           ;; Search for links on this line
           (let ((eol (line-end-position)))
             (while (re-search-forward lorg-link-re eol t)
-              (let* ((raw-uri (match-string-no-properties 2))
+              (let* ((whole (match-string-no-properties 0))
+                     (raw-uri (or (match-string-no-properties 2) ; [[uri][desc]]
+                                  (and (string-prefix-p "<" whole)
+                                       (substring whole 1 -1)) ; <uri>
+                                  whole))                      ; plain uri
                      (description (or (match-string-no-properties 3) raw-uri)))
                 (when raw-uri
                   (let* ((type nil) (path nil))
