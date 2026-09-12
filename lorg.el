@@ -395,12 +395,8 @@ This is a pure Elisp implementation that doesn't require external tools."
   (when (and exts (file-directory-p dir))
     (let* ((all-exts (lorg--get-ext-list exts))
            (exts-regexp (lorg--build-ext-regex all-exts))
-           (cands (directory-files-recursively dir exts-regexp t))
-           (matches))
-      (dolist (file cands matches)
-        (unless (file-directory-p file)
-          (push file matches)))
-      matches)))
+           (cands (directory-files-recursively dir exts-regexp nil nil t)))
+      (seq-filter #'file-regular-p cands))))
 
 (defun lorg--rescan-files (files)
   "Scan each element of FILES for links.
