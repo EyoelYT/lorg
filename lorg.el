@@ -272,7 +272,7 @@ Stop scanning when `lorg-max-links' entries have been added."
           (beginning-of-line)
           (when (looking-at md-heading-re)
             (let* ((level (length (match-string 1)))
-                   (title (string-trim-right (match-string-no-properties 2) "[ \t]+#+[ \t]*")))
+                   (title (string-trim-right (match-string-no-properties 2) "[ \t]*\\(?:#+[ \t]*\\)?")))
               (while (and heading-stack (>= (caar heading-stack) level))
                 (pop heading-stack))
               (push (cons level title) heading-stack)))
