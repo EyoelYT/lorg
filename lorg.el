@@ -36,6 +36,10 @@
 (require 'subr-x)
 (require 'rx)
 
+(unless (boundp 'org-element-cache-persistent)
+  (defvar org-element-cache-persistent nil
+    "Backup definition for older Org mode versions < 9.6."))
+
 (defgroup lorg nil
   "Link manager for Org and Markdown files."
   :group 'org
