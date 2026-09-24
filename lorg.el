@@ -234,7 +234,7 @@ Stop scanning when `lorg-max-links' entries have been added."
            (gc-cons-threshold 100000000)
            (coding-system-for-read 'utf-8)
            (md-heading-re "^\\(#+\\) +\\(.*\\)")
-           (md-link-re "!?\\[\\([^]]+\\)\\](\\([^)]*\\))")
+           (md-link-re "!?\\[\\([^]]+\\)\\](<?\\([^)\"\t ]*\\)>?\\(?:[ \t]+\"[^\"]*\"\\)?)") ; TODO: handle parentheses inside a URL
            (heading-stack nil)
            (count (lorg--cache-count)))
       (buffer-disable-undo)
