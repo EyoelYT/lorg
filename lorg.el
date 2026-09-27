@@ -429,7 +429,7 @@ This function returns the URI for DESC as a right aligned annotation."
     (when entry
       (let ((uri (caar entry)))
         (concat " "
-                (propertize " " 'display '(space :align-to 40))
+                (propertize " " 'display '(space :align-to 50))
                 (propertize (or uri "No uri") 'face (lorg--doc-face)))))))
 
 (defun lorg--affixation-function (cands)
@@ -438,9 +438,9 @@ Aligns link descriptions and URLs in a columnar format. CANDS is a list
 of completion candidates. This function looks up each candidate in the
 links cache and returns a list of (CANDIDATE DESCRIPTION SUFFIX)"
   (when cands
-    (let* ((max-margin 50)
+    (let* ((min-margin 50)
            (lens (mapcar (lambda (cand) (length cand)) cands))
-           (margin (max (+ (apply #'max lens) 4) max-margin)))
+           (margin (max (+ (apply #'max lens) 4) min-margin)))
       (mapcar
        (lambda (cand)
          (let* ((desc cand)
