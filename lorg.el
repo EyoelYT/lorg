@@ -408,12 +408,12 @@ This is a pure Elisp implementation that doesn't require external tools."
 (defun lorg--rescan-files (files)
   "Scan each element of FILES for links.
 Each element may be a regular file or a directory."
-  (let* ((file))
-    (while (setq file (pop files))
-      (cond ((file-regular-p file)
-             (lorg--scan-file file))
-            ((file-directory-p file)
-             (lorg--scan-directory file))))))
+  (dolist (file files)
+    (let ((expanded (expand-file-name file)))
+      (cond ((file-regular-p expanded)
+             (lorg--scan-file expanded))
+            ((file-directory-p expanded)
+             (lorg--scan-directory expanded))))))
 
 (defun lorg--doc-face ()
   "Return the face used for lorg URI annotations"
