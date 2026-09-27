@@ -408,8 +408,7 @@ This is a pure Elisp implementation that doesn't require external tools."
 (defun lorg--rescan-files (files)
   "Scan each element of FILES for links.
 Each element may be a regular file or a directory."
-  (let* ((file)
-         (inhibit-read-only t))
+  (let* ((file))
     (while (setq file (pop files))
       (cond ((file-regular-p file)
              (lorg--scan-file file))
