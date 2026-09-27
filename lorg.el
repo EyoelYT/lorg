@@ -537,7 +537,7 @@ cache from `lorg-files' before prompting."
   "Interactively select and open a link from `lorg-files'.
 With prefix ARG, force a rescan before prompting."
   (interactive "P")
-  (lorg-menu-ask "Link: " #'lorg-open-link (and arg)))
+  (lorg-menu-ask "Link: " #'lorg-open-link arg))
 
 (provide 'lorg)
 ;;; lorg.el ends here
